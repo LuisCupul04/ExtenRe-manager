@@ -3,7 +3,7 @@ description: "Application to use ExtenRe on Android."
 
 publish_to: 'none'
 
-version: 1.0.5+102500700
+version: 1.0.6+102500700
 
 environment:
   sdk: '>=3.7.0'
@@ -34,7 +34,7 @@ dependencies:
   font_awesome_flutter: ^10.8.0
   google_fonts: ^6.2.1
   injectable: ^2.4.0
-  intl: ^0.19.0
+  intl: ^0.20.2
   json_annotation: ^4.9.0
   language_code: ^0.5.5
   logcat:

@@ -3,7 +3,7 @@ description: "Application to use ExtenRe on Android."
 
 publish_to: 'none'
 
-version: 1.0.6+102500700
+version: 1.0.7+102500700
 
 environment:
   sdk: '>=3.7.0'
@@ -74,7 +74,7 @@ dependencies:
   wakelock_plus: ^1.2.10
 
 dev_dependencies:
-  analyzer: ^6.3.0 
+  analyzer: ^8.4.1
   build_runner: ^2.4.15
   flutter_lints: ^5.0.0
   injectable_generator: ^2.6.1

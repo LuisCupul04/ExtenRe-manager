@@ -30,16 +30,10 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Decode Keystore
-        env:
-          KEYSTORE_BASE64: ${{ secrets.Hoshii_keystoreFile }}
+      # 🔑 Autenticación para clonar paquetes de GitHub
+      - name: Configure Git for GitHub authentication
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "$KEYSTORE_BASE64" | base64 --decode > android/app/keystore.jks
-            echo "Keystore decodificado correctamente"
-          else
-            echo "No se encontró el secreto Hoshii_keystoreFile. La APK se generará sin firmar."
-          fi
+          git config --global url."https://${{ secrets.EXTEN_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
       - name: Install dependencies
         run: flutter pub get
@@ -57,9 +51,9 @@ jobs:
           KEYSTORE_ENTRY_PASSWORD: ${{ secrets.KEYSTORE_ENTRY_PASSWORD }}
         run: |
           if [ -f "android/app/keystore.jks" ] && [ -n "$KEYSTORE_PASSWORD" ]; then
-            echo "Firmando APK con keystore"
+            echo "Firmando APK"
           else
-            echo "APK sin firmar (se usará el debug keystore)"
+            echo "APK sin firmar"
           fi
           flutter build apk --release
 
@@ -75,7 +69,7 @@ jobs:
           files: ExtenRe-Manager-*.apk
           generate_release_notes: true
         env:
-          GITHUB_TOKEN: ${{ secrets.EXTEN_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4

@@ -3,14 +3,14 @@ name: Build ExtenRe Manager APK
 on:
   push:
     tags:
-      - 'v*'                # Se activa cuando se empuja un tag como v1.0.0, v2.1, etc.
-  workflow_dispatch:        # Permite ejecución manual desde la pestaña Actions
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write       # Necesario para subir a release
+      contents: write
 
     steps:
       - name: Checkout code
@@ -27,40 +27,46 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.27.4'   # Usa la versión que necesites; 3.27.4 es estable
           channel: 'stable'
           cache: true
 
+      - name: Repair Pub cache
+        run: flutter pub cache repair
+
       - name: Install dependencies
-        run: flutter pub get
+        env:
+          EXTEN_TOKEN: ${{ secrets.EXTEN_TOKEN }}
+        run: |
+          # Si hay token, configurar autenticación para paquetes privados
+          if [ -n "$EXTEN_TOKEN" ]; then
+            mkdir -p ~/.pub-cache
+            echo "//pub.dev/:_authToken=$EXTEN_TOKEN" > ~/.pub-cache/credentials.json
+            echo "//pub.dartlang.org/:_authToken=$EXTEN_TOKEN" >> ~/.pub-cache/credentials.json
+          fi
+          flutter pub get --verbose --timeout=120
 
       - name: Generate localization files
         run: flutter gen-l10n
 
-      # Si has cambiado el paquete Dart, asegúrate de que todo compile
       - name: Analyze project
         run: flutter analyze
 
-      # Construir APK de release (firmada si hay secrets, sino sin firmar)
       - name: Build APK
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEYSTORE_ENTRY_ALIAS: ${{ secrets.KEYSTORE_ENTRY_ALIAS }}
           KEYSTORE_ENTRY_PASSWORD: ${{ secrets.KEYSTORE_ENTRY_PASSWORD }}
         run: |
-          # Si existen las variables de firma, se usará el keystore del repositorio
-          # El archivo keystore debe estar en android/app/keystore.jks (no subir al repo, o subirlo cifrado)
-          if [ -f "android/app/keystore.jks" ] && [ ! -z "$KEYSTORE_PASSWORD" ]; then
-            echo "Firmando APK con keystore"
+          if [ -f "android/app/keystore.jks" ] && [ -n "$KEYSTORE_PASSWORD" ]; then
+            echo "Firmando APK"
           else
-            echo "No se encontró keystore o faltan secrets. Construyendo APK sin firmar (debug)."
-            # Opcional: usar build apk --release sin firmar (no recomendado para distribución)
+            echo "Sin firma"
           fi
           flutter build apk --release
 
       - name: Rename APK
         run: |
-          VERSION=${GITHUB_REF_NAME#v}   # Quita la 'v' del tag
+          VERSION=${GITHUB_REF_NAME#v}
           mv build/app/outputs/flutter-apk/app-release.apk "ExtenRe-Manager-v${VERSION}.apk"
 
       - name: Upload APK to release
@@ -69,12 +75,10 @@ jobs:
         with:
           files: ExtenRe-Manager-*.apk
           generate_release_notes: true
-          draft: false
-          prerelease: false
         env:
-          GITHUB_TOKEN: ${{ secrets.EXTEN_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload APK as artifact (para pruebas manuales)
+      - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
         with:
           name: ExtenRe-Manager-APK

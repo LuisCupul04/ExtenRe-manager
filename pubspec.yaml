@@ -3,7 +3,7 @@ description: "Application to use ExtenRe on Android."
 
 publish_to: 'none'
 
-version: 1.0.8+102500700
+version: 1.0.9+102500700
 
 environment:
   sdk: '>=3.7.0'

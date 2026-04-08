@@ -35,6 +35,12 @@ jobs:
         run: |
           git config --global url."https://${{ secrets.EXTEN_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
+      # 🧹 Limpiar caché de Pub para evitar referencias antiguas
+      - name: Clear Pub cache
+        run: |
+          rm -rf ~/.pub-cache
+          flutter pub cache repair
+
       - name: Install dependencies
         run: flutter pub get
 
@@ -44,6 +50,18 @@ jobs:
       - name: Analyze project
         run: flutter analyze
 
+      # 🔐 Decodificar keystore si se proporciona (opcional, usando Hoshii_ secrets)
+      - name: Decode Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.Hoshii_keystoreFile }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > android/app/keystore.jks
+            echo "Keystore decodificado correctamente"
+          else
+            echo "No se encontró el secreto Hoshii_keystoreFile. La APK se generará sin firmar."
+          fi
+
       - name: Build APK
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -51,9 +69,9 @@ jobs:
           KEYSTORE_ENTRY_PASSWORD: ${{ secrets.KEYSTORE_ENTRY_PASSWORD }}
         run: |
           if [ -f "android/app/keystore.jks" ] && [ -n "$KEYSTORE_PASSWORD" ]; then
-            echo "Firmando APK"
+            echo "Firmando APK con keystore"
           else
-            echo "APK sin firmar"
+            echo "APK sin firmar (se usará el debug keystore)"
           fi
           flutter build apk --release
 

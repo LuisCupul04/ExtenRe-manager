@@ -30,20 +30,19 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Repair Pub cache
-        run: flutter pub cache repair
+      - name: Decode Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.Hoshii_keystoreFile }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > android/app/keystore.jks
+            echo "Keystore decodificado correctamente"
+          else
+            echo "No se encontró el secreto Hoshii_keystoreFile. La APK se generará sin firmar."
+          fi
 
       - name: Install dependencies
-        env:
-          EXTEN_TOKEN: ${{ secrets.EXTEN_TOKEN }}
-        run: |
-          # Si hay token, configurar autenticación para paquetes privados
-          if [ -n "$EXTEN_TOKEN" ]; then
-            mkdir -p ~/.pub-cache
-            echo "//pub.dev/:_authToken=$EXTEN_TOKEN" > ~/.pub-cache/credentials.json
-            echo "//pub.dartlang.org/:_authToken=$EXTEN_TOKEN" >> ~/.pub-cache/credentials.json
-          fi
-          flutter pub get --verbose --timeout=120
+        run: flutter pub get
 
       - name: Generate localization files
         run: flutter gen-l10n
@@ -58,9 +57,9 @@ jobs:
           KEYSTORE_ENTRY_PASSWORD: ${{ secrets.KEYSTORE_ENTRY_PASSWORD }}
         run: |
           if [ -f "android/app/keystore.jks" ] && [ -n "$KEYSTORE_PASSWORD" ]; then
-            echo "Firmando APK"
+            echo "Firmando APK con keystore"
           else
-            echo "Sin firma"
+            echo "APK sin firmar (se usará el debug keystore)"
           fi
           flutter build apk --release
 
@@ -76,7 +75,7 @@ jobs:
           files: ExtenRe-Manager-*.apk
           generate_release_notes: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.EXTEN_TOKEN }}
 
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4

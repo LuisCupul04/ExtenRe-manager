@@ -1,0 +1,9 @@
+[versions]
+extenre-patcher = "20.0.0.dev-17-RE"
+extenre-library = "1.0.2.dev-17-RE"
+desugar_jdk_libs = "2.1.5"
+
+[libraries]
+extenre-patcher = { module = "com.extenre:extenre-patcher", version.ref = "extenre-patcher" }
+extenre-library = { module = "com.extenre:extenre-library", version.ref = "extenre-library" }
+desugar_jdk_libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugar_jdk_libs" }

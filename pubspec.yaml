@@ -3,7 +3,7 @@ description: "Application to use ExtenRe on Android."
 
 publish_to: 'none'
 
-version: 1.0.7+102500700
+version: 1.0.8+102500700
 
 environment:
   sdk: '>=3.7.0'
@@ -81,6 +81,7 @@ dev_dependencies:
   json_serializable: ^6.9.0
 
 flutter:
+  generate: true
   uses-material-design: true
   fonts:
     - family: CustomIcon

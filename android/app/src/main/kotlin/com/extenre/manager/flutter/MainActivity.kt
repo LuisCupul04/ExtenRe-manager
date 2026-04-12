@@ -38,14 +38,12 @@ import java.io.StringWriter
 import java.util.logging.LogRecord
 import java.util.logging.Logger
 
-
 class MainActivity : FlutterActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private lateinit var installerChannel: MethodChannel
     private var cancel: Boolean = false
     private var stopResult: MethodChannel.Result? = null
     private val apkParserChannel = "com.extenre.manager/apk_parser"
-
     private lateinit var patches: Set<Patch<*>>
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -55,10 +53,10 @@ class MainActivity : FlutterActivity() {
         val installerChannel = "com.extenre.manager.flutter/installer"
         val openBrowserChannel = "com.extenre.manager.flutter/browser"
 
+        // Canal para abrir el navegador
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             openBrowserChannel
-            setupApkParserChannel(flutterEngine)
         ).setMethodCallHandler { call, result ->
             if (call.method == "openBrowser") {
                 val searchQuery = call.argument<String>("query")
@@ -69,11 +67,9 @@ class MainActivity : FlutterActivity() {
             }
         }
 
-        val mainChannel =
-            MethodChannel(flutterEngine.dartExecutor.binaryMessenger, patcherChannel)
-
-        this.installerChannel =
-            MethodChannel(flutterEngine.dartExecutor.binaryMessenger, installerChannel)
+        // Canal principal del patcher
+        val mainChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, patcherChannel)
+        this.installerChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, installerChannel)
 
         mainChannel.setMethodCallHandler { call, result ->
             when (call.method) {
@@ -87,8 +83,7 @@ class MainActivity : FlutterActivity() {
                     val keystorePassword = call.argument<String>("keystorePassword")
                     val ripArchitectureList = call.argument<List<String>>("ripArchitectureList")
 
-                    if (
-                        inFilePath != null &&
+                    if (inFilePath != null &&
                         outFilePath != null &&
                         selectedPatches != null &&
                         options != null &&
@@ -109,21 +104,16 @@ class MainActivity : FlutterActivity() {
                             keystorePassword,
                             ripArchitectureList
                         )
-                    } else result.error(
-                        "INVALID_ARGUMENTS",
-                        "Invalid arguments",
-                        "One or more arguments are missing"
-                    )
+                    } else {
+                        result.error("INVALID_ARGUMENTS", "Invalid arguments", "One or more arguments are missing")
+                    }
                 }
-
                 "stopPatcher" -> {
                     cancel = true
                     stopResult = result
                 }
-
                 "getPatches" -> {
                     val patchBundleFilePath = call.argument<String>("patchBundleFilePath")!!
-
                     try {
                         val patchBundleFile = File(patchBundleFilePath)
                         patchBundleFile.setWritable(false)
@@ -149,13 +139,9 @@ class MainActivity : FlutterActivity() {
                                     it.compatiblePackages?.forEach { (name, versions) ->
                                         val compatiblePackageJson = JSONObject().apply {
                                             put("name", name)
-                                            put(
-                                                "versions",
-                                                JSONArray().apply {
-                                                    versions?.forEach { version ->
-                                                        put(version)
-                                                    }
-                                                })
+                                            put("versions", JSONArray().apply {
+                                                versions?.forEach { version -> put(version) }
+                                            })
                                         }
                                         put(compatiblePackageJson)
                                     }
@@ -168,26 +154,18 @@ class MainActivity : FlutterActivity() {
                                             put("description", option.description)
                                             put("required", option.required)
 
-                                            fun JSONObject.putValue(
-                                                value: Any?,
-                                                key: String = "value"
-                                            ) = if (value is Array<*>) put(
-                                                key,
-                                                JSONArray().apply {
-                                                    value.forEach { put(it) }
-                                                })
-                                            else put(key, value)
+                                            fun JSONObject.putValue(value: Any?, key: String = "value") =
+                                                if (value is Array<*>) {
+                                                    put(key, JSONArray().apply { value.forEach { put(it) } })
+                                                } else {
+                                                    put(key, value)
+                                                }
 
                                             putValue(option.default)
-
                                             option.values?.let { values ->
-                                                put(
-                                                    "values",
-                                                    JSONObject().apply {
-                                                        values.forEach { (key, value) ->
-                                                            putValue(value, key)
-                                                        }
-                                                    })
+                                                put("values", JSONObject().apply {
+                                                    values.forEach { (key, value) -> putValue(value, key) }
+                                                })
                                             } ?: put("values", null)
                                             put("type", option.type)
                                         }.let(::put)
@@ -197,23 +175,75 @@ class MainActivity : FlutterActivity() {
                         }
                     }.toString().let(result::success)
                 }
-
                 "installApk" -> {
                     val apkPath = call.argument<String>("apkPath")!!
                     PackageInstallerManager.result = result
                     installApk(apkPath)
                 }
-
                 "uninstallApp" -> {
                     val packageName = call.argument<String>("packageName")!!
                     uninstallApp(packageName)
                     PackageInstallerManager.result = result
                 }
-
                 else -> result.notImplemented()
             }
         }
+
+        // ✅ Canal para parsear APKs (agregado correctamente)
+        setupApkParserChannel(flutterEngine)
     }
+
+    // ==================== CANAL PARA PARSEAR APKS ====================
+    private fun setupApkParserChannel(flutterEngine: FlutterEngine) {
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, apkParserChannel).setMethodCallHandler { call, result ->
+            if (call.method == "parseApk") {
+                val apkPath = call.argument<String>("apkPath")
+                if (apkPath != null) {
+                    try {
+                        val aaptBinary = Aapt.binary(applicationContext)
+                        val process = ProcessBuilder(aaptBinary.absolutePath, "dump", "badging", apkPath)
+                            .redirectErrorStream(true)
+                            .start()
+                        val output = process.inputStream.bufferedReader().readText()
+                        val exitCode = process.waitFor()
+
+                        if (exitCode == 0) {
+                            result.success(parseAaptOutput(output))
+                        } else {
+                            result.error("AAPT_ERROR", "AAPT exited with code $exitCode", output)
+                        }
+                    } catch (e: Exception) {
+                        result.error("EXECUTION_ERROR", e.message, null)
+                    }
+                } else {
+                    result.error("INVALID_ARGUMENT", "apkPath is required", null)
+                }
+            } else {
+                result.notImplemented()
+            }
+        }
+    }
+
+    private fun parseAaptOutput(output: String): Map<String, String> {
+        val result = mutableMapOf<String, String>()
+        val lines = output.lineSequence()
+        for (line in lines) {
+            when {
+                line.startsWith("package: name='") -> {
+                    val packageName = line.substringAfter("name='").substringBefore("'")
+                    result["packageName"] = packageName
+                    val versionName = line.substringAfter("versionName='").substringBefore("'")
+                    result["versionName"] = versionName
+                }
+                line.startsWith("application-label:") -> {
+                    val appName = line.substringAfter(":'").substringBefore("'")
+                    result["appName"] = appName
+                }
+            }
+        }
+        return result
+    }
+    // ================================================================
 
     private fun openBrowser(query: String?) {
         val intent = Intent(Intent.ACTION_WEB_SEARCH).apply {
@@ -236,7 +266,6 @@ class MainActivity : FlutterActivity() {
         ripArchitectureList: List<String>
     ) {
         val inFile = File(inFilePath)
-        // Necessary because the file is copied from a nonwriteable location.
         inFile.setWritable(true)
         inFile.setReadable(true)
         val outFile = File(outFilePath)
@@ -248,11 +277,7 @@ class MainActivity : FlutterActivity() {
                 handler.post {
                     installerChannel.invokeMethod(
                         "update",
-                        mapOf(
-                            "progress" to progress,
-                            "header" to header,
-                            "log" to log
-                        )
+                        mapOf("progress" to progress, "header" to header, "log" to log)
                     )
                 }
             }
@@ -264,28 +289,21 @@ class MainActivity : FlutterActivity() {
                     block()
                     postStop()
                 }
-
                 return cancel
             }
 
-
-            // Setup logger
             Logger.getLogger("").apply {
                 handlers.forEach { handler ->
                     handler.close()
                     removeHandler(handler)
                 }
-
                 object : java.util.logging.Handler() {
                     override fun publish(record: LogRecord) {
                         if (cancel) return
-                        if (
-                            record.loggerName?.startsWith("com.extenre") == true ||
-                            // Logger in class brut.util.OS.
-                            record.loggerName == ""
-                        ) updateProgress(-1.0, "", record.message)
+                        if (record.loggerName?.startsWith("com.extenre") == true || record.loggerName == "") {
+                            updateProgress(-1.0, "", record.message)
+                        }
                     }
-
                     override fun flush() = Unit
                     override fun close() = flush()
                 }.let(::addHandler)
@@ -293,7 +311,6 @@ class MainActivity : FlutterActivity() {
 
             try {
                 updateProgress(0.0, "Reading APK...", "Reading APK")
-
                 val patcher = Patcher(
                     PatcherConfig(
                         inFile,
@@ -302,7 +319,6 @@ class MainActivity : FlutterActivity() {
                         tmpDir.path,
                     )
                 )
-
                 if (cancel(patcher::close)) return@Thread
                 updateProgress(0.02, "Loading patches...", "Loading patches")
 
@@ -310,10 +326,7 @@ class MainActivity : FlutterActivity() {
                     val isCompatible = patch.compatiblePackages?.any { (name, _) ->
                         name == patcher.context.packageMetadata.packageName
                     } ?: false
-
-                    val compatibleOrUniversal =
-                        isCompatible || patch.compatiblePackages.isNullOrEmpty()
-
+                    val compatibleOrUniversal = isCompatible || patch.compatiblePackages.isNullOrEmpty()
                     compatibleOrUniversal && selectedPatches.any { it == patch.name }
                 }.onEach { patch ->
                     options[patch.name]?.forEach { (key, value) ->
@@ -326,76 +339,52 @@ class MainActivity : FlutterActivity() {
 
                 val patcherResult = patcher.use {
                     it += patches
-
                     runBlocking {
-                        // Update the progress bar every time a patch is executed from 0.15 to 0.7
                         val totalPatchesCount = patches.size
                         val progressStep = 0.55 / totalPatchesCount
                         var progress = 0.05
-
                         patcher().collect(FlowCollector { patchResult: PatchResult ->
                             if (cancel(patcher::close)) return@FlowCollector
-
                             val msg = patchResult.exception?.let {
                                 val writer = StringWriter()
                                 it.printStackTrace(PrintWriter(writer))
                                 "${patchResult.patch.name} failed: $writer"
-                            } ?: run {
-                                "${patchResult.patch.name} succeeded"
-                            }
-
+                            } ?: "${patchResult.patch.name} succeeded"
                             updateProgress(progress, "", msg)
                             progress += progressStep
                         })
                     }
-
                     if (cancel(patcher::close)) return@Thread
                     updateProgress(0.75, "Building...", "")
-
                     patcher.get()
                 }
 
                 if (cancel(patcher::close)) return@Thread
-
                 patcherResult.applyTo(inFile, ripArchitectureList.toTypedArray())
-
                 if (cancel(patcher::close)) return@Thread
 
                 ApkUtils.signApk(
                     inFile,
                     outFile,
                     "ExtenRe",
-                    ApkUtils.KeyStoreDetails(
-                        keyStoreFile,
-                        keystorePassword,
-                        "alias",
-                        keystorePassword
-                    )
+                    ApkUtils.KeyStoreDetails(keyStoreFile, keystorePassword, "alias", keystorePassword)
                 )
-
                 updateProgress(.85, "Patched", "Patched APK")
             } catch (ex: Throwable) {
                 if (!cancel) {
-                    val stack = ex.stackTraceToString()
-                    updateProgress(
-                        -100.0,
-                        "Failed",
-                        "An error occurred:\n$stack"
-                    )
+                    updateProgress(-100.0, "Failed", "An error occurred:\n${ex.stackTraceToString()}")
                 }
             } finally {
                 inFile.delete()
                 tmpDir.deleteRecursively()
             }
-
             handler.post { result.success(null) }
         }.start()
     }
 
     private fun installApk(apkPath: String) {
         val packageInstaller: PackageInstaller = applicationContext.packageManager.packageInstaller
-        val sessionParams =
-            PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+        val sessionParams = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
         val sessionId: Int = packageInstaller.createSession(sessionParams)
         val session: PackageInstaller.Session = packageInstaller.openSession(sessionId)
         session.use { activeSession ->
@@ -411,10 +400,7 @@ class MainActivity : FlutterActivity() {
             action = "APP_INSTALL_ACTION"
         }
         val receiverPendingIntent = PendingIntent.getBroadcast(
-            context,
-            sessionId,
-            receiverIntent,
-            PackageInstallerManager.flags
+            context, sessionId, receiverIntent, PackageInstallerManager.flags
         )
         session.commit(receiverPendingIntent.intentSender)
         session.close()
@@ -425,9 +411,8 @@ class MainActivity : FlutterActivity() {
         val receiverIntent = Intent(applicationContext, UninstallerReceiver::class.java).apply {
             action = "APP_UNINSTALL_ACTION"
         }
-        val receiverPendingIntent =
-            PendingIntent.getBroadcast(context, 0, receiverIntent, PackageInstallerManager.flags)
-        packageInstaller.uninstall(packageName, receiverPendingIntent.intentSender)  
+        val receiverPendingIntent = PendingIntent.getBroadcast(context, 0, receiverIntent, PackageInstallerManager.flags)
+        packageInstaller.uninstall(packageName, receiverPendingIntent.intentSender)
     }
 
     object PackageInstallerManager {
@@ -438,54 +423,4 @@ class MainActivity : FlutterActivity() {
             PendingIntent.FLAG_UPDATE_CURRENT
         }
     }
-}
-
-private fun setupApkParserChannel(flutterEngine: FlutterEngine) {
-    MethodChannel(flutterEngine.dartExecutor.binaryMessenger, apkParserChannel).setMethodCallHandler { call, result ->
-        if (call.method == "parseApk") {
-            val apkPath = call.argument<String>("apkPath")
-            if (apkPath != null) {
-                try {
-                    val aaptBinary = Aapt.binary(applicationContext)
-                    val process = ProcessBuilder(aaptBinary.absolutePath, "dump", "badging", apkPath)
-                        .redirectErrorStream(true)
-                        .start()
-                    val output = process.inputStream.bufferedReader().readText()
-                    val exitCode = process.waitFor()
-
-                    if (exitCode == 0) {
-                        result.success(parseAaptOutput(output))
-                    } else {
-                        result.error("AAPT_ERROR", "AAPT exited with code $exitCode", output)
-                    }
-                } catch (e: Exception) {
-                    result.error("EXECUTION_ERROR", e.message, null)
-                }
-            } else {
-                result.error("INVALID_ARGUMENT", "apkPath is required", null)
-            }
-        } else {
-            result.notImplemented()
-        }
-    }
-}
-
-private fun parseAaptOutput(output: String): Map<String, String> {
-    val result = mutableMapOf<String, String>()
-    val lines = output.lineSequence()
-    for (line in lines) {
-        when {
-            line.startsWith("package: name='") -> {
-                val packageName = line.substringAfter("name='").substringBefore("'")
-                result["packageName"] = packageName
-                val versionName = line.substringAfter("versionName='").substringBefore("'")
-                result["versionName"] = versionName
-            }
-            line.startsWith("application-label:") -> {
-                val appName = line.substringAfter(":'").substringBefore("'")
-                result["appName"] = appName
-            }
-        }
-    }
-    return result
 }

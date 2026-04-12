@@ -44,6 +44,7 @@ class MainActivity : FlutterActivity() {
     private lateinit var installerChannel: MethodChannel
     private var cancel: Boolean = false
     private var stopResult: MethodChannel.Result? = null
+    private val apkParserChannel = "com.extenre.manager/apk_parser"
 
     private lateinit var patches: Set<Patch<*>>
 
@@ -57,6 +58,7 @@ class MainActivity : FlutterActivity() {
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             openBrowserChannel
+            setupApkParserChannel(flutterEngine)
         ).setMethodCallHandler { call, result ->
             if (call.method == "openBrowser") {
                 val searchQuery = call.argument<String>("query")
@@ -425,7 +427,7 @@ class MainActivity : FlutterActivity() {
         }
         val receiverPendingIntent =
             PendingIntent.getBroadcast(context, 0, receiverIntent, PackageInstallerManager.flags)
-        packageInstaller.uninstall(packageName, receiverPendingIntent.intentSender)
+        packageInstaller.uninstall(packageName, receiverPendingIntent.intentSender)  
     }
 
     object PackageInstallerManager {
@@ -436,4 +438,54 @@ class MainActivity : FlutterActivity() {
             PendingIntent.FLAG_UPDATE_CURRENT
         }
     }
+}
+
+private fun setupApkParserChannel(flutterEngine: FlutterEngine) {
+    MethodChannel(flutterEngine.dartExecutor.binaryMessenger, apkParserChannel).setMethodCallHandler { call, result ->
+        if (call.method == "parseApk") {
+            val apkPath = call.argument<String>("apkPath")
+            if (apkPath != null) {
+                try {
+                    val aaptBinary = Aapt.binary(applicationContext)
+                    val process = ProcessBuilder(aaptBinary.absolutePath, "dump", "badging", apkPath)
+                        .redirectErrorStream(true)
+                        .start()
+                    val output = process.inputStream.bufferedReader().readText()
+                    val exitCode = process.waitFor()
+
+                    if (exitCode == 0) {
+                        result.success(parseAaptOutput(output))
+                    } else {
+                        result.error("AAPT_ERROR", "AAPT exited with code $exitCode", output)
+                    }
+                } catch (e: Exception) {
+                    result.error("EXECUTION_ERROR", e.message, null)
+                }
+            } else {
+                result.error("INVALID_ARGUMENT", "apkPath is required", null)
+            }
+        } else {
+            result.notImplemented()
+        }
+    }
+}
+
+private fun parseAaptOutput(output: String): Map<String, String> {
+    val result = mutableMapOf<String, String>()
+    val lines = output.lineSequence()
+    for (line in lines) {
+        when {
+            line.startsWith("package: name='") -> {
+                val packageName = line.substringAfter("name='").substringBefore("'")
+                result["packageName"] = packageName
+                val versionName = line.substringAfter("versionName='").substringBefore("'")
+                result["versionName"] = versionName
+            }
+            line.startsWith("application-label:") -> {
+                val appName = line.substringAfter(":'").substringBefore("'")
+                result["appName"] = appName
+            }
+        }
+    }
+    return result
 }

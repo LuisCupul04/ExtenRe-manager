@@ -39,7 +39,7 @@ class HomeViewModel extends BaseViewModel {
   final ManagerAPI _managerAPI = locator<ManagerAPI>();
   final PatcherAPI _patcherAPI = locator<PatcherAPI>();
   final GithubAPI _githubAPI = locator<GithubAPI>();
-  final ExtenReAPI _ExtenReAPI = locator<ExtenReAPI>();
+  //final ExtenReAPI _ExtenReAPI = locator<ExtenReAPI>();
   final Toast _toast = locator<Toast>();
   final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
   bool showUpdatableApps = false;
@@ -273,11 +273,11 @@ class HomeViewModel extends BaseViewModel {
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+                  children: [  
                     Text(
                       t.homeView.updateDialogText(
                         file:
-                            isPatches ? 'ExtenRe Patches' : 'RVX Manager',
+                            isPatches ? 'ExtenRe Patches' : 'ExtenRe Manager',
                         version:
                             isPatches
                                 ? _currentPatchesVersion
@@ -337,7 +337,7 @@ class HomeViewModel extends BaseViewModel {
     }
   }
 
-  Future<void> updateManager(BuildContext context) async {
+  Future<void> updateManager(BuildContext context) async {  
     final ValueNotifier<bool> downloaded = ValueNotifier(false);
     try {
       _toast.showBottom(t.homeView.downloadingMessage);

@@ -24,7 +24,6 @@ import 'package:extenre_manager/models/patched_application.dart';
 import 'package:extenre_manager/services/github_api.dart';
 import 'package:extenre_manager/services/manager_api.dart';
 import 'package:extenre_manager/services/patcher_api.dart';
-import 'package:extenre_manager/services/extenre_api.dart';
 import 'package:extenre_manager/services/toast.dart';
 import 'package:extenre_manager/ui/views/navigation/navigation_viewmodel.dart';
 import 'package:extenre_manager/ui/views/patcher/patcher_viewmodel.dart';
@@ -39,7 +38,7 @@ class HomeViewModel extends BaseViewModel {
   final ManagerAPI _managerAPI = locator<ManagerAPI>();
   final PatcherAPI _patcherAPI = locator<PatcherAPI>();
   final GithubAPI _githubAPI = locator<GithubAPI>();
-  //final ExtenReAPI _ExtenReAPI = locator<ExtenReAPI>();
+  // final ExtenReAPI _extenreAPI = locator<ExtenReAPI>();  // ← Eliminada, no se usa
   final Toast _toast = locator<Toast>();
   final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
   bool showUpdatableApps = false;
@@ -273,7 +272,7 @@ class HomeViewModel extends BaseViewModel {
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [  
+                  children: [
                     Text(
                       t.homeView.updateDialogText(
                         file:
@@ -309,7 +308,7 @@ class HomeViewModel extends BaseViewModel {
                   _managerAPI.setShowUpdateDialog(!noShow.value);
                   Navigator.pop(innerContext);
                 },
-                child: Text(t.dismissButton), // Decide later
+                child: Text(t.dismissButton),
               ),
               FilledButton(
                 onPressed: () async {
@@ -337,130 +336,94 @@ class HomeViewModel extends BaseViewModel {
     }
   }
 
-  Future<void> updateManager(BuildContext context) async {  
+  // ✅ MÉTODO CORREGIDO (sin dependencia de _extenreAPI)
+  Future<void> updateManager(BuildContext context) async {
     final ValueNotifier<bool> downloaded = ValueNotifier(false);
     try {
       _toast.showBottom(t.homeView.downloadingMessage);
       showDialog(
         context: context,
-        builder:
-            (context) => ValueListenableBuilder(
-              valueListenable: downloaded,
-              builder: (context, value, child) {
-                return AlertDialog(
-                  title: Text(
-                    !value
-                        ? t.homeView.downloadingMessage
-                        : t.homeView.downloadedMessage,
-                  ),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (!value)
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+        barrierDismissible: false,
+        builder: (context) => ValueListenableBuilder(
+          valueListenable: downloaded,
+          builder: (context, value, child) {
+            return AlertDialog(
+              title: Text(
+                !value
+                    ? t.homeView.downloadingMessage
+                    : t.homeView.downloadedMessage,
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!value)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Barra de progreso indeterminada (no tenemos progreso real)
+                        LinearProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Theme.of(context).colorScheme.secondary,
+                          ),
+                        ),
+                        const SizedBox(height: 16.0),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: FilledButton(
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                            },
+                            child: Text(t.cancelButton),
+                          ),
+                        ),
+                      ],
+                    ),
+                  if (value)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          t.homeView.installUpdate,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: Theme.of(context).colorScheme.secondary,
+                          ),
+                        ),
+                        const SizedBox(height: 16.0),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
                           children: [
-                            StreamBuilder<double>(
-                              initialData: 0.0,
-                              stream: _extenreAPI.managerUpdateProgress.stream,
-                              builder: (context, snapshot) {
-                                return LinearProgressIndicator(
-                                  value: snapshot.data! * 0.01,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    Theme.of(context).colorScheme.secondary,
-                                  ),
+                            TextButton(
+                              onPressed: () {
+                                Navigator.of(context).pop();
+                              },
+                              child: Text(t.cancelButton),
+                            ),
+                            const SizedBox(width: 8.0),
+                            FilledButton(
+                              onPressed: () async {
+                                await _patcherAPI.installApk(
+                                  context,
+                                  downloadedApk!.path,
                                 );
                               },
-                            ),
-                            const SizedBox(height: 16.0),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: FilledButton(
-                                onPressed: () {
-                                  _extenreAPI.disposeManagerUpdateProgress();
-                                  Navigator.of(context).pop();
-                                },
-                                child: Text(t.cancelButton),
-                              ),
+                              child: Text(t.updateButton),
                             ),
                           ],
                         ),
-                      if (value)
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              t.homeView.installUpdate,
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                                color: Theme.of(context).colorScheme.secondary,
-                              ),
-                            ),
-                            const SizedBox(height: 16.0),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                Align(
-                                  alignment: Alignment.centerRight,
-                                  child: TextButton(
-                                    onPressed: () {
-                                      Navigator.of(context).pop();
-                                    },
-                                    child: Text(t.cancelButton),
-                                  ),
-                                ),
-                                const SizedBox(width: 8.0),
-                                Align(
-                                  alignment: Alignment.centerRight,
-                                  child: FilledButton(
-                                    onPressed: () async {
-                                      await _patcherAPI.installApk(
-                                        context,
-                                        downloadedApk!.path,
-                                      );
-                                    },
-                                    child: Text(t.updateButton),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                    ],
-                  ),
-                );
-              },
-            ),
+                      ],
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
       );
       final File? managerApk = await downloadManager();
       if (managerApk != null) {
         downloaded.value = true;
         downloadedApk = managerApk;
-        // await flutterLocalNotificationsPlugin.zonedSchedule(
-        //   0,
-        //   FlutterI18n.translate(
-        //     context,
-        //     'homeView.notificationTitle',
-        //   ),
-        //   FlutterI18n.translate(
-        //     context,
-        //     'homeView.notificationText',
-        //   ),
-        //   tz.TZDateTime.now(tz.local).add(const Duration(seconds: 5)),
-        //   const NotificationDetails(
-        //     android: AndroidNotificationDetails(
-        //       'extenre_manager_channel',
-        //       'RVX Manager Channel',
-        //       importance: Importance.max,
-        //       priority: Priority.high,
-        //       ticker: 'ticker',
-        //     ),
-        //   ),
-        //   androidAllowWhileIdle: true,
-        //   uiLocalNotificationDateInterpretation:
-        //       UILocalNotificationDateInterpretation.absoluteTime,
-        // );
         _toast.showBottom(t.homeView.installingMessage);
         await _patcherAPI.installApk(context, managerApk.path);
       } else {

@@ -5,18 +5,18 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_file_dialog/flutter_file_dialog.dart';
-import 'package:revanced_manager/app/app.locator.dart';
-import 'package:revanced_manager/gen/strings.g.dart';
-import 'package:revanced_manager/models/patch.dart';
-import 'package:revanced_manager/models/patched_application.dart';
-import 'package:revanced_manager/services/manager_api.dart';
-import 'package:revanced_manager/services/patcher_api.dart';
-import 'package:revanced_manager/services/toast.dart';
-import 'package:revanced_manager/ui/views/patcher/patcher_viewmodel.dart';
-import 'package:revanced_manager/utils/about_info.dart';
-import 'package:revanced_manager/utils/check_for_supported_patch.dart';
+import 'package:extenre_manager/app/app.locator.dart';
+import 'package:extenre_manager/gen/strings.g.dart';
+import 'package:extenre_manager/models/patch.dart';
+import 'package:extenre_manager/models/patched_application.dart';
+import 'package:extenre_manager/services/manager_api.dart';
+import 'package:extenre_manager/services/patcher_api.dart';
+import 'package:extenre_manager/services/toast.dart';
+import 'package:extenre_manager/ui/views/patcher/patcher_viewmodel.dart';
+import 'package:extenre_manager/utils/about_info.dart';
+import 'package:extenre_manager/utils/check_for_supported_patch.dart';
 import 'package:stacked/stacked.dart';
-import '../../../utils/apk_parser_helper.dart';   // Ajusta la ruta si es necesario
+import 'package:extenre_manager/services/apk_parser_service.dart';
 
 class AppSelectorViewModel extends BaseViewModel {
   final PatcherAPI _patcherAPI = locator<PatcherAPI>();
@@ -92,7 +92,7 @@ class AppSelectorViewModel extends BaseViewModel {
   Future<void> openDefaultBrowser(String query) async {
     if (Platform.isAndroid) {
       try {
-        const platform = MethodChannel('app.revanced.manager.flutter/browser');
+        const platform = MethodChannel('com.extenre.manager.flutter/browser');
         await platform.invokeMethod('openBrowser', {'query': query});
       } catch (e) {
         if (kDebugMode) {
@@ -260,7 +260,7 @@ class AppSelectorViewModel extends BaseViewModel {
     );
   }
 
-  // ✅ NUEVO: selección de APK desde almacenamiento usando ApkParserHelper
+  // ✅ Selección de APK desde almacenamiento usando el servicio nativo
   Future<void> selectAppFromStorage(BuildContext context) async {
     try {
       final String? result = await FlutterFileDialog.pickFile(
@@ -270,26 +270,37 @@ class AppSelectorViewModel extends BaseViewModel {
       );
       if (result != null) {
         final File apkFile = File(result);
-        final apkInfo = await ApkParserHelper.getAppInfoFromApk(apkFile.path);
-        if (apkInfo != null && context.mounted) {
+
+        // Mostrar diálogo de carga
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(child: CircularProgressIndicator()),
+        );
+
+        final apkInfo = await ApkParserService.parseApk(apkFile.path);
+
+        // Cerrar diálogo de carga
+        if (context.mounted) Navigator.of(context).pop();
+
+        if (context.mounted) {
           final app = ApplicationWithIcon(
-            appName: apkInfo['appName'],
-            packageName: apkInfo['packageName'],
-            versionName: apkInfo['versionName'],
-            icon: apkInfo['icon'],
+            appName: apkInfo['appName'] ?? 'APK externo',
+            packageName: apkInfo['packageName']!,
+            versionName: apkInfo['versionName'] ?? '0.0.0',
+            icon: Uint8List(0),
             apkFilePath: apkFile.path,
             systemApp: false,
           );
           await selectApp(context, app, true);
-        } else {
-          _toast.showBottom('No se pudo leer el archivo APK o es inválido');
         }
       }
-    } on Exception catch (e) {
-      if (kDebugMode) {
-        print(e);
-      }
-      _toast.showBottom(t.appSelectorView.errorMessage);
+    } on PlatformException catch (e) {
+      if (context.mounted) Navigator.of(context).pop();
+      _toast.showBottom('Error al leer el APK: ${e.message}');
+    } catch (e) {
+      if (context.mounted) Navigator.of(context).pop();
+      _toast.showBottom('Error al seleccionar el APK: $e');
     }
   }
 

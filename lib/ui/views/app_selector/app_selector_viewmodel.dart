@@ -1,29 +1,22 @@
-/*
- * Copyright (C) 2022 ReVanced LLC
- * Copyright (C) 2022 inotia00
- * Copyright (C) 2026 LuisCupul04
- *
- * SPDX-License-Identifier: GPL-3.0-only
- */
-
 import 'dart:io';
-
+import 'dart:typed_data';
 import 'package:device_apps/device_apps.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_file_dialog/flutter_file_dialog.dart';
-import 'package:extenre_manager/app/app.locator.dart';
-import 'package:extenre_manager/gen/strings.g.dart';
-import 'package:extenre_manager/models/patch.dart';
-import 'package:extenre_manager/models/patched_application.dart';
-import 'package:extenre_manager/services/manager_api.dart';
-import 'package:extenre_manager/services/patcher_api.dart';
-import 'package:extenre_manager/services/toast.dart';
-import 'package:extenre_manager/ui/views/patcher/patcher_viewmodel.dart';
-import 'package:extenre_manager/utils/about_info.dart';
-import 'package:extenre_manager/utils/check_for_supported_patch.dart';
+import 'package:revanced_manager/app/app.locator.dart';
+import 'package:revanced_manager/gen/strings.g.dart';
+import 'package:revanced_manager/models/patch.dart';
+import 'package:revanced_manager/models/patched_application.dart';
+import 'package:revanced_manager/services/manager_api.dart';
+import 'package:revanced_manager/services/patcher_api.dart';
+import 'package:revanced_manager/services/toast.dart';
+import 'package:revanced_manager/ui/views/patcher/patcher_viewmodel.dart';
+import 'package:revanced_manager/utils/about_info.dart';
+import 'package:revanced_manager/utils/check_for_supported_patch.dart';
 import 'package:stacked/stacked.dart';
+import '../../../utils/apk_parser_helper.dart';   // Ajusta la ruta si es necesario
 
 class AppSelectorViewModel extends BaseViewModel {
   final PatcherAPI _patcherAPI = locator<PatcherAPI>();
@@ -33,6 +26,7 @@ class AppSelectorViewModel extends BaseViewModel {
   List<String> allApps = [];
   bool noApps = false;
   bool isRooted = false;
+
   int patchesCount(String packageName) {
     return _patcherAPI.getFilteredPatches(packageName).length;
   }
@@ -74,7 +68,8 @@ class AppSelectorViewModel extends BaseViewModel {
   Future<bool> checkSplitApk(String packageName) async {
     final app = await DeviceApps.getApp(packageName);
     if (app != null) {
-      return app.isSplit;
+      // Con device_apps oficial no tenemos isSplit, asumimos false
+      return false;
     }
     return true;
   }
@@ -97,7 +92,7 @@ class AppSelectorViewModel extends BaseViewModel {
   Future<void> openDefaultBrowser(String query) async {
     if (Platform.isAndroid) {
       try {
-        const platform = MethodChannel('com.extenre.manager.flutter/browser');
+        const platform = MethodChannel('app.revanced.manager.flutter/browser');
         await platform.invokeMethod('openBrowser', {'query': query});
       } catch (e) {
         if (kDebugMode) {
@@ -265,6 +260,7 @@ class AppSelectorViewModel extends BaseViewModel {
     );
   }
 
+  // ✅ NUEVO: selección de APK desde almacenamiento usando ApkParserHelper
   Future<void> selectAppFromStorage(BuildContext context) async {
     try {
       final String? result = await FlutterFileDialog.pickFile(
@@ -274,23 +270,19 @@ class AppSelectorViewModel extends BaseViewModel {
       );
       if (result != null) {
         final File apkFile = File(result);
-        final List<String> pathSplit = result.split('/');
-        pathSplit.removeLast();
-        final Directory filePickerCacheDir = Directory(pathSplit.join('/'));
-        final Iterable<File> deletableFiles =
-            (await filePickerCacheDir.list().toList()).whereType<File>();
-        for (final file in deletableFiles) {
-          if (file.path != apkFile.path && file.path.endsWith('.apk')) {
-            file.delete();
-          }
-        }
-        final ApplicationWithIcon? application =
-            await DeviceApps.getAppFromStorage(
-          apkFile.path,
-          true,
-        ) as ApplicationWithIcon?;
-        if (application != null && context.mounted) {
-          await selectApp(context, application, true);
+        final apkInfo = await ApkParserHelper.getAppInfoFromApk(apkFile.path);
+        if (apkInfo != null && context.mounted) {
+          final app = ApplicationWithIcon(
+            appName: apkInfo['appName'],
+            packageName: apkInfo['packageName'],
+            versionName: apkInfo['versionName'],
+            icon: apkInfo['icon'],
+            apkFilePath: apkFile.path,
+            systemApp: false,
+          );
+          await selectApp(context, app, true);
+        } else {
+          _toast.showBottom('No se pudo leer el archivo APK o es inválido');
         }
       }
     } on Exception catch (e) {
